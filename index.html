@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Герман флоэ</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#fff7f8;--card:#fff;--tx:#2b2226;--mut:#8a7a80;--line:#f0dfe3;--per:#e5446d;--prd:#f7c6d2;--fert:#cfe8ff;--ov:#4a90d9;--ac:#e5446d;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1417;--card:#262026;--tx:#f5eaee;--mut:#a89aa0;--line:#3a2f35;--per:#f0587f;--prd:#5a2a38;--fert:#26405c;--ov:#6fb0f5;--ac:#f0587f;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1a1417;--card:#262026;--tx:#f5eaee;--mut:#a89aa0;--line:#3a2f35;--per:#f0587f;--prd:#5a2a38;--fert:#26405c;--ov:#6fb0f5;--ac:#f0587f;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+main{max-width:480px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px}
+.big{font-size:30px;font-weight:700;color:var(--ac)}
+.mut{color:var(--mut);font-size:14px}
+.row{display:flex;justify-content:space-between;align-items:center}
+button{font:inherit;border:0;border-radius:12px;padding:10px 14px;background:var(--ac);color:#fff;cursor:pointer}
+button.g{background:transparent;color:var(--tx);border:1px solid var(--line)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px;text-align:center}
+.dow{font-size:12px;color:var(--mut)}
+.d{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;font-size:15px;border:2px solid transparent}
+.d.o{opacity:.3}
+.d.pred{background:var(--prd)}
+.d.fert{background:var(--fert)}
+.d.ovul{background:var(--ov);color:#fff}
+.d.per{background:var(--per);color:#fff}
+.d.today{border-color:var(--tx)}
+.leg{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--mut);margin-top:12px}
+.leg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+.stats{display:flex;gap:12px}.stats div{flex:1}
+.stats b{font-size:20px}
+</style>
+</head>
+<body>
+<main>
+<h1>🌸 Герман флоэ</h1>
+<div class="card" id="status"></div>
+<div class="card">
+  <div class="row"><button class="g" id="prev">‹</button><b id="mt"></b><button class="g" id="next">›</button></div>
+  <div class="cal" id="cal"></div>
+  <div class="leg">
+    <span><i style="background:var(--per)"></i>месячные</span>
+    <span><i style="background:var(--prd)"></i>прогноз</span>
+    <span><i style="background:var(--fert)"></i>fertile-окно</span>
+    <span><i style="background:var(--ov)"></i>овуляция</span>
+  </div>
+  <p class="mut" style="margin:10px 0 0">Нажмите на день, чтобы отметить или убрать месячные.</p>
+</div>
+<div class="card stats" id="stats"></div>
+<div class="card">
+  <p class="mut" style="margin-top:0">🔒 Данные хранятся только в вашем браузере на этом устройстве. Никаких аккаунтов, серверов и рекламы.</p>
+  <p class="mut">Прогнозы — приблизительные оценки по вашей истории, не медицинская рекомендация и не метод контрацепции.</p>
+  <button class="g" id="reset">Удалить все данные</button>
+</div>
+</main>
+<script>
+const KEY='cycle-days-v1';
+let days=new Set();
+try{const r=localStorage.getItem(KEY);if(r)days=new Set(JSON.parse(r))}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify([...days]))}catch(e){}};
+const fmt=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const parse=s=>{const[a,b,c]=s.split('-').map(Number);return new Date(a,b-1,c)};
+const add=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+const diff=(a,b)=>Math.round((a-b)/864e5);
+const today=new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate());
+let view=new Date(today.getFullYear(),today.getMonth(),1);
+const MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const avg=a=>Math.round(a.reduce((x,y)=>x+y,0)/a.length);
+
+function calc(){
+  const s=[...days].sort().map(parse),runs=[];
+  s.forEach((d,i)=>{if(i&&diff(d,s[i-1])===1)runs[runs.length-1].len++;else runs.push({start:d,len:1})});
+  const cyc=[];for(let i=1;i<runs.length;i++){const c=diff(runs[i].start,runs[i-1].start);if(c>=15&&c<=60)cyc.push(c)}
+  const cl=cyc.length?avg(cyc.slice(-6)):28;
+  const pl=runs.length?avg(runs.slice(-6).map(r=>r.len)):5;
+  const map={};
+  let last=null,next=null;
+  if(runs.length){
+    last=runs[runs.length-1].start;
+    for(let k=1;k<=4;k++){
+      const st=add(last,cl*k);if(k===1)next=st;
+      for(let i=0;i<pl;i++)map[fmt(add(st,i))]='pred';
+      const ov=add(st,-14);
+      for(let i=-5;i<=1;i++){const key=fmt(add(ov,i));if(!map[key])map[key]='fert'}
+      map[fmt(ov)]='ovul';
+    }
+  }
+  return{runs,cl,pl,map,last,next,n:cyc.length};
+}
+
+function render(){
+  const c=calc();
+  document.getElementById('mt').textContent=MON[view.getMonth()]+' '+view.getFullYear();
+  const cal=document.getElementById('cal');let h='';
+  ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach(x=>h+='<div class="dow">'+x+'</div>');
+  const first=new Date(view.getFullYear(),view.getMonth(),1);
+  const start=add(first,-((first.getDay()+6)%7));
+  for(let i=0;i<42;i++){
+    const d=add(start,i),k=fmt(d);
+    let cls='d';
+    if(d.getMonth()!==view.getMonth())cls+=' o';
+    if(days.has(k))cls+=' per';else if(c.map[k])cls+=' '+c.map[k];
+    if(diff(d,today)===0)cls+=' today';
+    h+='<div class="'+cls+'" data-k="'+k+'">'+d.getDate()+'</div>';
+  }
+  cal.innerHTML=h;
+  cal.querySelectorAll('.d').forEach(el=>el.onclick=()=>{
+    const k=el.dataset.k;days.has(k)?days.delete(k):days.add(k);save();render();
+  });
+  const st=document.getElementById('status');
+  if(!c.last){
+    st.innerHTML='<div class="big">Добро пожаловать</div><p class="mut">Отметьте дни последних месячных в календаре — и появятся прогнозы.</p><button id="td">Месячные начались сегодня</button>';
+  }else{
+    const cd=diff(today,c.last)+1,left=diff(c.next,today);
+    let msg=left>0?'Следующие месячные через '+left+' дн.':left===0?'Месячные ожидаются сегодня':'Задержка '+(-left)+' дн.';
+    st.innerHTML='<div class="mut">День цикла</div><div class="big">'+cd+'</div><div>'+msg+'</div><div style="margin-top:12px"><button id="td">Месячные начались сегодня</button></div>';
+  }
+  document.getElementById('td').onclick=()=>{for(let i=0;i<c.pl;i++)days.add(fmt(add(today,i)));save();render()};
+  document.getElementById('stats').innerHTML=
+    '<div><div class="mut">Длина цикла</div><b>'+c.cl+' дн.</b></div>'+
+    '<div><div class="mut">Месячные</div><b>'+c.pl+' дн.</b></div>'+
+    '<div><div class="mut">Циклов в базе</div><b>'+c.n+'</b></div>';
+}
+document.getElementById('prev').onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()-1,1);render()};
+document.getElementById('next').onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()+1,1);render()};
+document.getElementById('reset').onclick=()=>{if(confirm('Удалить все данные?')){days=new Set();save();render()}};
+render();
+</script>
+</body>
+</html>
